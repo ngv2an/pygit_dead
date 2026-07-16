@@ -1,0 +1,10 @@
+# Ignore everything
+*
+
+# Except the 260714 and 260716 directory, readme.md, and .gitignore itself
+!260714/
+!260714/**
+!260716/
+!260716/**
+!readme.md
+!.gitignore
