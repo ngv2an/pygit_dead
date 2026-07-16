@@ -46,3 +46,6 @@ if (this.leanbotStatus === "Finish" && robotStatus !== "Finish"
     - Bộ lọc frame cũ có thời gian đi lùi vẫn hoạt động như trước.
 
 - Kết quả: Digital Twin giữ ổn định `Status: Finish` khi mission kết thúc.
+
+### B. Công việc tiếp theo
+- Xin anh giao việc cho em!
