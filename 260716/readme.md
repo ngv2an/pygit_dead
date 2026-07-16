@@ -47,5 +47,36 @@ if (this.leanbotStatus === "Finish" && robotStatus !== "Finish"
 
 - Kết quả: Digital Twin giữ ổn định `Status: Finish` khi mission kết thúc.
 
+#### 2. Ví dụ cụ thể từng frame
+- Ở cuối mission, client gửi các frame thô (raw serial), mỗi frame mở đầu bằng ký tự trạng thái:
+
+| Frame thô client gửi   | Ký tự status | Nghĩa           |
+|------------------------|--------------|-----------------|
+| `...27B 0c06H 000b0 0` | B            | Go (đang chạy)  |
+| `28Z 0c06H 000eo 0`    | Z            | Finish          |
+
+- Simulator .212 nhận, giải mã, và tự sinh thêm frame nội suy để làm mượt chuyển động. Ở tầng sim JSON (log `DT-recv`) có 3 loại:
+
+| Frame sim JSON            | RobotStatus | Nguồn                       |
+|---------------------------|-------------|-----------------------------|
+| `status=Go t=3.2`         | "Go"        | từ frame B                  |
+| `status=Finish t=3.2`     | "Finish"    | từ frame Z                  |
+| `status=undefined t=3.21` | Không có    | frame nội suy .212 tự sinh  |
+
+- Frame gây lật badge không có `Status Z`, cũng không có `Status B`, nó thiếu hẳn `RobotStatus`. Nó là frame nội suy vị trí do simulator sinh ra, `robotTime = 3.21` (nhích hơn `Finish` 3.20 vài ms).
+
+- Lý do lật badge: render queue sắp xếp theo `robotTime`. `Finish` (3.20) render trước -> badge "Finish". Rồi frame nội suy (3.21) render sau. Đáng lẽ frame thiếu status không nên đổi gì, nhưng code tự gán mặc định "Go" cho nó -> lật badge về "Go". 
+
+#### 2. Cải tiến
+- 2 chỗ tự gán `RobotStatus = "Go"` khi thiếu:
+    - `RenderBotQueue.push`: https://github.com/PTV-TechHub/digitaltwins-service/blob/a391e925c6fdc5e7c8958d584b12bcd0ee914809/digital-twins/client/src/views/experience/leanbot-core/CommonMessageProcess.ts#L144-L150
+    - `enqueueMessage`: https://github.com/PTV-TechHub/digitaltwins-service/blob/a391e925c6fdc5e7c8958d584b12bcd0ee914809/digital-twins/client/src/views/experience/leanbot-core/CommonMessageProcess.ts#L306-L312
+
+- Bỏ cả 2 chỗ gán "Go".
+- Thêm carry-forward tại `RenderBotQueue.handleMessage`, nơi frame được lấy ra render theo đúng thứ tự `robotTime` đã sort: nếu thiếu `RobotStatus` thì giữ `lastRenderedStatus` (status hợp lệ gần nhất). Reset về rỗng khi mission mới (`robotTime < ngưỡng`).
+
+
+
+
 ### B. Công việc tiếp theo
 - Xin anh giao việc cho em!
