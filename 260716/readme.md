@@ -67,7 +67,7 @@ if (this.leanbotStatus === "Finish" && robotStatus !== "Finish"
 
 - Lý do lật badge: render queue sắp xếp theo `robotTime`. `Finish` (3.20) render trước -> badge "Finish". Rồi frame nội suy (3.21) render sau. Đáng lẽ frame thiếu status không nên đổi gì, nhưng code tự gán mặc định "Go" cho nó -> lật badge về "Go". 
 
-#### 2. Cải tiến
+#### 3. Cải tiến
 - 2 chỗ tự gán `RobotStatus = "Go"` khi thiếu:
     - `RenderBotQueue.push`: https://github.com/PTV-TechHub/digitaltwins-service/blob/a391e925c6fdc5e7c8958d584b12bcd0ee914809/digital-twins/client/src/views/experience/leanbot-core/CommonMessageProcess.ts#L144-L150
     - `enqueueMessage`: https://github.com/PTV-TechHub/digitaltwins-service/blob/a391e925c6fdc5e7c8958d584b12bcd0ee914809/digital-twins/client/src/views/experience/leanbot-core/CommonMessageProcess.ts#L306-L312
