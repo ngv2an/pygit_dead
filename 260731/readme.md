@@ -1,14 +1,13 @@
-# NguyenVanAn
+# Bảng tổng hợp message giữa các module
 
-## NHẬT KÍ NGÀY 31/07/2026
+Tài liệu này mô tả **contract message đang chạy** của luồng VirtualLeanbotPython.
+Mỗi lần thêm/sửa/xoá message phải cập nhật bảng ở đây trong cùng commit — xem
+[Quy tắc cập nhật](#quy-tắc-cập-nhật) ở cuối.
 
-### A. Công việc đã làm
+## Phạm vi và cách gọi tên
 
-#### 1. `SYNAPSE_CITY_SCALE`
-
-#### 8. Bảng tổng hợp message giữa các module
-##### 8.1. Phạm vi và cách gọi tên
-- Bridge gồm 3 mắt xích nối tiếp, đứng giữa Brython và hai đích (Digital Twin, MQTT gateway):
+**Bridge** trong tài liệu này gồm 3 mắt xích nối tiếp, đứng giữa Brython và hai
+đích tiêu thụ (Digital Twin, MQTT gateway):
 
 | Thành phần | File |
 |---|---|
@@ -19,19 +18,22 @@
 ```
 Brython (SynapseCity.py, pyLeanbot2)
    │  (1) gọi hàm JS trên window/self
-   V
-runner-worker.js ──(2) post kind──> runner.html ──(3) type: python-*──> BlocklyTestView
+   ▼
+runner-worker.js ──(2) post kind──► runner.html ──(3) type: python-*──► BlocklyTestView
                                                                             │
-                                              (4) digital-twin-* ───────────┼──> iframe /experience
+                                              (4) digital-twin-* ───────────┼──► iframe /experience
                                                                             │
-                                              (5) WS-worker ────────────────┴──> MQTT gateway
+                                              (5) WS-worker ────────────────┴──► MQTT gateway
 ```
 
-- Nguyên tắc: Brython không bao giờ nói chuyện trực tiếp với Digital Twin hay MQTT. Mọi thứ đi qua Bridge và Bridge quyết định message nào sang đích nào.
+Nguyên tắc: **Brython không bao giờ nói chuyện trực tiếp với Digital Twin hay
+MQTT.** Mọi thứ đi qua Bridge, và Bridge quyết định message nào sang đích nào.
 
-##### 8.2. Bảng chính
+---
 
-- (`—`) nghĩa là message không đi qua chặng đó.
+## Bảng chính
+
+Trống (`—`) nghĩa là message không đi qua chặng đó.
 
 | # | Việc | Brython ⇒ Bridge | Bridge ⇒ DigitalTwin | Bridge ⇒ MQTT |
 |---|---|---|---|---|
@@ -53,6 +55,53 @@ runner-worker.js ──(2) post kind──> runner.html ──(3) type: python-*
 | 16 | Trạng thái chạy | — | `digital-twin-run-status` — `{running, speedUp}` | — |
 | 17 | Đổi mission | — | `digital-twin-mission` — `{mission}` | — |
 
+### Envelope cột "Bridge ⇒ DigitalTwin"
+
+Dòng 2–10 dùng chung một envelope `postMessage` (targetOrigin = `window.location.origin`):
+
+```js
+{
+  source: 'blockly-test',
+  type: 'digital-twin-direct-message',
+  kind: 'direct-message',
+  version: 1,
+  runId, seq, simTick,
+  target,      // 'scene' | 'object' | 'robot' | 'runtime' | 'run'
+  operation,   // 'configure' | 'create' | 'move' | 'pose' | 'rgb' | 'gripper' | 'finish' | 'update' | 'start' | 'end'
+  payload,
+}
+```
+
+Dòng 15–17 là message rời, chỉ có `source` + `type` + field riêng.
+
+> **Lưu ý về đơn vị góc:** `object/move` dùng `headingDeg`, còn `robot/pose` dùng
+> `headingRad`. Đây là khác biệt có thật trong code hiện tại, không phải lỗi
+> đánh máy của tài liệu.
+
+> **Lưu ý về `robot/pose`:** worker gắn `pose` vào **mọi** item telemetry, và
+> `notifyDigitalTwinPoseFrame()` chỉ lọc theo capability chứ không lọc theo dạng
+> data. Nên frame `B L` (RGB) và `B G` (gripper) cũng kéo theo một `robot/pose`,
+> không riêng frame `B` vị trí.
+
+### Chi tiết cột "Bridge ⇒ MQTT"
+
+| Việc | API gateway | Do ai gọi |
+|---|---|---|
+| Gửi telemetry | `sendTelemetry(mission, data)` → topic `leanbot/<user>/telemetry/m` | Parent (`sendMissionTelemetry`) |
+| `startSim` / `stopSim` / `startMission` / `stopMission` / `sendCmdStart` | qua WS-worker | **iframe Digital Twin**, rồi báo ngược về parent bằng `digital-twin-api` để hiện đủ 7 API trong tab Log |
+
+Việc một telemetry frame có được đẩy lên MQTT hay không do
+`classifyPythonTelemetryRoute()` quyết định
+(`client/src/views/blockly-test/python-telemetry-route.ts`):
+
+| Loại run | Điều kiện | Route |
+|---|---|---|
+| Legacy (không import thư viện mission) | mọi frame `sendTelemetry` | `backend` → gửi MQTT |
+| Direct, `telemetryPolicy: 'bootstrap-normal-finish'` | frame `A`, frame `B` đầu tiên, frame `Z` cuối | `backend` → gửi MQTT |
+| Direct, các frame còn lại | | `direct-only` → chỉ sang Digital Twin |
+| `mode` khác `sendTelemetry` hoặc data rỗng | | `invalid` → bỏ, ghi log |
+
+---
 
 ## Message hạ tầng của Bridge
 
@@ -116,3 +165,18 @@ Giữ lại để đối chiếu với tài liệu cũ — **không dùng nữa*
 | `digital-twin-python-gripper-frame` | `robot/gripper` |
 | `digital-twin-python-finish-frame` | `robot/finish` |
 | `digital-twin-python-synapse-block-frame` | `scene/configure`, `object/create`, `object/move` |
+
+## Quy tắc cập nhật
+
+Khi sửa message, đối chiếu lại đúng các file sau rồi cập nhật bảng:
+
+| Chặng | File nguồn |
+|---|---|
+| Brython ⇒ Bridge | `SynapseCity.py`, `pyLeanbot2/LbDigitalTwin.py`, `pyLeanbot2/MQTT.py`, `backend.py` |
+| Bridge nội bộ | `runner-worker.js` (`__directMessageBridge`, `__backendBridge`, `__fieldBridge`, `post()`), `runner.html` |
+| Bridge ⇒ DigitalTwin | `BlocklyTestView.ts` (`postDigitalTwinDirectMessage`, `notifyDigitalTwin*`), `python-direct-message.ts` |
+| Bridge ⇒ MQTT | `python-telemetry-route.ts`, `BlocklyTestView.ts` (`sendMissionTelemetry`) |
+| Phía nhận | `experience.mjs` (`applyDigitalTwinDirectMessage`), `direct-scene-profile.ts`, `direct-object-model-json.ts` |
+
+Message bị xoá thì chuyển xuống mục [Message đã bị loại bỏ](#message-đã-bị-loại-bỏ)
+thay vì xoá hẳn, để người đọc tài liệu cũ biết nó đã thành cái gì.
